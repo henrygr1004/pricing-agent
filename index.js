@@ -78,7 +78,8 @@ console.log(JSON.stringify({ passed, delta_pct: Math.round(delta * 100) }));
 
     const bashCmd = `cat > check.js << 'SCRIPTEOF'\n${jsCode}\nSCRIPTEOF\nnode check.js`;
     const result = await session.exec('bash', { args: ['-lc', bashCmd] });
-    return JSON.parse(result.stdout.trim());
+    const stdoutText = result.stdout?.toString ? result.stdout.toString() : String(result.stdout);
+    return JSON.parse(stdoutText.trim());
   } finally {
     await session.close?.();
   }
