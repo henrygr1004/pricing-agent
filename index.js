@@ -79,7 +79,11 @@ console.log(JSON.stringify({ passed, delta_pct: Math.round(delta * 100) }));
     const bashCmd = `cat > check.js << 'SCRIPTEOF'\n${jsCode}\nSCRIPTEOF\nnode check.js`;
     const result = await session.exec('bash', { args: ['-lc', bashCmd] });
     const stdoutText = result.stdout?.toString ? result.stdout.toString() : String(result.stdout);
-    return JSON.parse(stdoutText.trim());
+    const jsonMatch = stdoutText.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      throw new Error(`Sandbox produced no JSON output. Raw stdout: ${stdoutText.slice(0, 300)}`);
+    }
+    return JSON.parse(jsonMatch[0]);
   } finally {
     await session.close?.();
   }
