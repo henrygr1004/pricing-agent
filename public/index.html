@@ -10,6 +10,8 @@
   button { cursor: pointer; }
   .step { border-left: 3px solid #7c3aed; padding: 10px 16px; margin: 16px 0; background: #faf5ff; }
   .step h3 { margin: 0 0 6px 0; }
+  .tool-name { opacity: 0; transition: opacity 0.2s ease; font-weight: normal; color: #7c3aed; font-size: 0.85em; }
+  .step:hover .tool-name { opacity: 1; }
   pre { white-space: pre-wrap; word-break: break-word; }
   #loading { display: none; color: #7c3aed; }
 </style>
@@ -42,9 +44,9 @@ async function run() {
       return;
     }
     results.innerHTML = `
-      <div class="step"><h3>1. Research (LinkUp)</h3><pre>${data.research}</pre></div>
-      <div class="step"><h3>2. Decision (Nebius)</h3><pre>${JSON.stringify(data.decision, null, 2)}</pre></div>
-      <div class="step"><h3>3. Action (RevenueCat)</h3><pre>${JSON.stringify(data.action, null, 2)}</pre></div>
+      <div class="step"><h3>1. Research <span class="tool-name">(LinkUp)</span></h3><pre>${data.research}</pre></div>
+      <div class="step"><h3>2. Decision <span class="tool-name">(Nebius)</span></h3><pre>${JSON.stringify(data.decision, null, 2)}</pre></div>
+      <div class="step"><h3>3. Action <span class="tool-name">(RevenueCat)</span></h3><pre>${JSON.stringify(data.action, null, 2)}</pre></div>
     `;
   } catch (e) {
     loading.style.display = 'none';
