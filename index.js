@@ -115,7 +115,7 @@ async function applyPricingToRevenueCat(decision) {
 }
 
 app.post('/api/run-pipeline', async (req, res) => {
-  const { product } = req.body;
+  const { product, skipValidation } = req.body;
   if (!product) return res.status(400).json({ error: 'product is required' });
 
   try {
@@ -124,9 +124,15 @@ app.post('/api/run-pipeline', async (req, res) => {
 
     const decision = await decidePricing(product, researchSummary);
 
-    const validation = await validateInSandbox(decision);
-    if (!validation.passed) {
-      return res.status(422).json({ error: `Price rejected by sandbox validation: ${validation.delta_pct}% change exceeds safety threshold` });
+    let validation = null;
+    if (skipValidation) {
+      // DEMO ONLY: bypasses the Tenki Sandbox safety check so the contrast is visible live.
+      validation = { skipped: true };
+    } else {
+      validation = await validateInSandbox(decision);
+      if (!validation.passed) {
+        return res.status(422).json({ error: `Price rejected by sandbox validation: ${validation.delta_pct}% change exceeds safety threshold` });
+      }
     }
 
     const action = await applyPricingToRevenueCat(decision);

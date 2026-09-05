@@ -137,6 +137,20 @@
 
   .error { border-left: 3px solid #ef4444; }
   .error .step-body { color: #fca5a5; }
+
+  .warn { border-left: 3px solid #f5a623; }
+  .warn .step-body { color: #fbd38d; }
+
+  .toggle-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 12px;
+    font-size: 13px;
+    color: var(--muted);
+    cursor: pointer;
+  }
+  .toggle-row input { width: auto; accent-color: var(--purple); cursor: pointer; }
 </style>
 </head>
 <body>
@@ -152,6 +166,11 @@
     <button id="runBtn" onclick="run()">Run pipeline</button>
   </div>
 
+  <label class="toggle-row">
+    <input type="checkbox" id="skipValidation" />
+    <span>Skip Tenki Sandbox validation (demo comparison)</span>
+  </label>
+
   <div id="loading"><div class="spinner"></div><span>Running pipeline...</span></div>
   <div id="results"></div>
 </div>
@@ -159,6 +178,7 @@
 <script>
 async function run() {
   const product = document.getElementById('product').value;
+  const skipValidation = document.getElementById('skipValidation').checked;
   const results = document.getElementById('results');
   const loading = document.getElementById('loading');
   const btn = document.getElementById('runBtn');
@@ -172,7 +192,7 @@ async function run() {
     const res = await fetch('/api/run-pipeline', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ product }),
+      body: JSON.stringify({ product, skipValidation }),
     });
     const data = await res.json();
     loading.style.display = 'none';
@@ -189,6 +209,17 @@ async function run() {
 
     const offeringsCount = data.action?.offerings?.items?.length ?? 0;
 
+    const validateBlock = data.validation.skipped
+      ? `<div class="step warn">
+          <div class="step-title"><span class="badge">⚠️</span> Validate <span class="tool-name">Tenki Sandbox</span></div>
+          <div class="step-body">Skipped — this price went straight to RevenueCat with <strong>no safety check</strong>. This is what every other pricing tool does by default.</div>
+        </div>`
+      : `<div class="step">
+          <div class="step-title"><span class="badge">🛡️</span> Validate <span class="tool-name">Tenki Sandbox</span></div>
+          <div class="kv"><span class="k">Sanity check</span><span class="v">${data.validation.passed ? 'Passed ✅' : 'Rejected ❌'}</span></div>
+          <div class="kv"><span class="k">Price change</span><span class="v">${data.validation.delta_pct}%</span></div>
+        </div>`;
+
     results.innerHTML = `
       <div class="step">
         <div class="step-title"><span class="badge">🔎</span> Research <span class="tool-name">LinkUp</span></div>
@@ -204,11 +235,7 @@ async function run() {
         <div class="step-body">${data.decision.reasoning}</div>
       </div>
 
-      <div class="step">
-        <div class="step-title"><span class="badge">🛡️</span> Validate <span class="tool-name">Tenki Sandbox</span></div>
-        <div class="kv"><span class="k">Sanity check</span><span class="v">${data.validation.passed ? 'Passed ✅' : 'Rejected ❌'}</span></div>
-        <div class="kv"><span class="k">Price change</span><span class="v">${data.validation.delta_pct}%</span></div>
-      </div>
+      ${validateBlock}
 
       <div class="step">
         <div class="step-title"><span class="badge">⚡</span> Action <span class="tool-name">RevenueCat</span></div>
