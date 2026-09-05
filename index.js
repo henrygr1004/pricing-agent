@@ -66,7 +66,9 @@ async function validateInSandbox(decision) {
   try {
     // A tiny, disposable script that sanity-checks the AI's price suggestion
     // against a mock current-price baseline before it's trusted to act.
-    const script = `
+    // Written and run inline via bash so we only depend on session.exec,
+    // which is the one method confirmed by Tenki's own docs.
+    const jsCode = `
 const decision = ${JSON.stringify(decision)};
 const currentPrice = 10; // mock baseline; swap for a real lookup later
 const delta = (decision.suggested_price - currentPrice) / currentPrice;
@@ -74,8 +76,8 @@ const passed = Math.abs(delta) <= 0.5; // reject any single jump over 50%
 console.log(JSON.stringify({ passed, delta_pct: Math.round(delta * 100) }));
 `.trim();
 
-    await session.fs.writeFile('check.js', script);
-    const result = await session.exec('node', { args: ['check.js'] });
+    const bashCmd = `cat > check.js << 'SCRIPTEOF'\n${jsCode}\nSCRIPTEOF\nnode check.js`;
+    const result = await session.exec('bash', { args: ['-lc', bashCmd] });
     return JSON.parse(result.stdout.trim());
   } finally {
     await session.close?.();
