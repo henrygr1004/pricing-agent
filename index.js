@@ -74,7 +74,7 @@ const passed = Math.abs(delta) <= 0.5; // reject any single jump over 50%
 console.log(JSON.stringify({ passed, delta_pct: Math.round(delta * 100) }));
 `.trim();
 
-    await session.fs.writeText('check.js', script);
+    await session.fs.writeFile('check.js', script);
     const result = await session.exec('node', { args: ['check.js'] });
     return JSON.parse(result.stdout.trim());
   } finally {
