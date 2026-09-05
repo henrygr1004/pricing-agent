@@ -78,7 +78,14 @@ console.log(JSON.stringify({ passed, delta_pct: Math.round(delta * 100) }));
 
     const bashCmd = `cat > check.js << 'SCRIPTEOF'\n${jsCode}\nSCRIPTEOF\nnode check.js`;
     const result = await session.exec('bash', { args: ['-lc', bashCmd] });
-    const stdoutText = result.stdout?.toString ? result.stdout.toString() : String(result.stdout);
+    let stdoutText;
+    if (typeof result.stdout === 'string') {
+      stdoutText = result.stdout;
+    } else {
+      // stdout came back as a Uint8Array (not a Node Buffer), so decode it explicitly
+      // instead of relying on its default Array-like toString().
+      stdoutText = new TextDecoder('utf-8').decode(result.stdout);
+    }
     const jsonMatch = stdoutText.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
       throw new Error(`Sandbox produced no JSON output. Raw stdout: ${stdoutText.slice(0, 300)}`);
