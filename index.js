@@ -7,9 +7,8 @@ const app = express();
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-const { LINKUP_API_KEY, NEBIUS_API_KEY, NEBIUS_BASE_URL, REVENUECAT_API_KEY, REVENUECAT_PROJECT_ID } = process.env;
+const { LINKUP_API_KEY, NEBIUS_API_KEY, NEBIUS_BASE_URL, NEBIUS_MODEL, REVENUECAT_API_KEY, REVENUECAT_PROJECT_ID } = process.env;
 
-// STEP 1 — Research: ask LinkUp for competitor pricing info
 async function researchCompetitors(product) {
   const res = await fetch('https://api.linkup.so/v1/search', {
     method: 'POST',
@@ -27,7 +26,6 @@ async function researchCompetitors(product) {
   return res.json();
 }
 
-// STEP 2 — Decision: send research to a model hosted on Nebius
 async function decidePricing(product, researchSummary) {
   const res = await fetch(`${NEBIUS_BASE_URL}/chat/completions`, {
     method: 'POST',
@@ -36,7 +34,7 @@ async function decidePricing(product, researchSummary) {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model: 'meta-llama/Meta-Llama-3.1-70B-Instruct', // swap for whatever model Nebius exposes to you
+      model: NEBIUS_MODEL,
       messages: [
         {
           role: 'system',
@@ -56,7 +54,6 @@ async function decidePricing(product, researchSummary) {
   return JSON.parse(content);
 }
 
-// STEP 3 — Action: push the new price into RevenueCat as an Offering/Package update
 async function applyPricingToRevenueCat(decision) {
   const res = await fetch(
     `https://api.revenuecat.com/v2/projects/${REVENUECAT_PROJECT_ID}/offerings`,
@@ -67,10 +64,6 @@ async function applyPricingToRevenueCat(decision) {
   );
   if (!res.ok) throw new Error(`RevenueCat error: ${res.status} ${await res.text()}`);
   const offerings = await res.json();
-  // For the demo: return the current offerings + the price we WOULD apply.
-  // Actually creating/updating packages requires product IDs already set up in RevenueCat's
-  // dashboard (App Store/Play Store linked products) — do that setup once beforehand,
-  // then swap this GET for a POST/PATCH to /packages using a real product_id.
   return { offerings, applied_price: decision.suggested_price };
 }
 
@@ -81,11 +74,8 @@ app.post('/api/run-pipeline', async (req, res) => {
   try {
     const research = await researchCompetitors(product);
     const researchSummary = research.answer || JSON.stringify(research).slice(0, 4000);
-
     const decision = await decidePricing(product, researchSummary);
-
     const action = await applyPricingToRevenueCat(decision);
-
     res.json({ product, research: researchSummary, decision, action });
   } catch (err) {
     console.error(err);
