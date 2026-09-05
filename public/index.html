@@ -205,6 +205,12 @@ async function run() {
       </div>
 
       <div class="step">
+        <div class="step-title"><span class="badge">🛡️</span> Validate <span class="tool-name">Tenki Sandbox</span></div>
+        <div class="kv"><span class="k">Sanity check</span><span class="v">${data.validation.passed ? 'Passed ✅' : 'Rejected ❌'}</span></div>
+        <div class="kv"><span class="k">Price change</span><span class="v">${data.validation.delta_pct}%</span></div>
+      </div>
+
+      <div class="step">
         <div class="step-title"><span class="badge">⚡</span> Action <span class="tool-name">RevenueCat</span></div>
         <div class="kv"><span class="k">Applied price</span><span class="v">$${data.action.applied_price}</span></div>
         <div class="kv"><span class="k">Project</span><span class="v">${data.action.offerings.project_id ?? 'connected'}</span></div>
