@@ -27,6 +27,30 @@ async function researchCompetitors(product) {
   return res.json();
 }
 
+// STEP 1b — Research: ask LinkUp what price-increase tolerance is typical for
+// this product's industry, so the Tenki safety threshold is a real researched
+// number instead of a made-up constant.
+async function researchPriceTolerance(product) {
+  const res = await fetch('https://api.linkup.so/v1/search', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${LINKUP_API_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      q: `What percentage price increase can a SaaS company like ${product} typically implement without causing significant customer churn, according to SaaS pricing research?`,
+      depth: 'standard',
+      outputType: 'sourcedAnswer',
+    }),
+  });
+  if (!res.ok) throw new Error(`LinkUp error: ${res.status} ${await res.text()}`);
+  const data = await res.json();
+  const text = data.answer || '';
+  const match = text.match(/(\d{1,2})\s?%/);
+  const thresholdPct = match ? parseInt(match[1], 10) : 15; // fallback if LinkUp gives no number
+  return { thresholdPct, source: text };
+}
+
 // STEP 2 — Decision: send research to a model hosted on Nebius
 async function decidePricing(product, researchSummary) {
   const res = await fetch(`${NEBIUS_BASE_URL}/chat/completions`, {
@@ -58,7 +82,7 @@ async function decidePricing(product, researchSummary) {
 
 // STEP 2.5 — Validate: run a quick sanity-check simulation in an isolated Tenki sandbox
 // before the decision is allowed to touch anything real.
-async function validateInSandbox(decision) {
+async function validateInSandbox(decision, thresholdPct) {
   const { TenkiSandbox } = await import('@tenkicloud/sandbox');
   const sandbox = new TenkiSandbox({ apiKey: TENKI_API_KEY });
 
@@ -66,14 +90,16 @@ async function validateInSandbox(decision) {
   try {
     // A tiny, disposable script that sanity-checks the AI's price suggestion
     // against a mock current-price baseline before it's trusted to act.
+    // The threshold itself comes from LinkUp's industry research, not a guess.
     // Written and run inline via bash so we only depend on session.exec,
     // which is the one method confirmed by Tenki's own docs.
     const jsCode = `
 const decision = ${JSON.stringify(decision)};
+const thresholdPct = ${thresholdPct};
 const currentPrice = 10; // mock baseline; swap for a real lookup later
 const delta = (decision.suggested_price - currentPrice) / currentPrice;
-const passed = Math.abs(delta) <= 0.5; // reject any single jump over 50%
-console.log(JSON.stringify({ passed, delta_pct: Math.round(delta * 100) }));
+const passed = Math.abs(delta) <= (thresholdPct / 100);
+console.log(JSON.stringify({ passed, delta_pct: Math.round(delta * 100), threshold_pct: thresholdPct }));
 `.trim();
 
     const bashCmd = `cat > check.js << 'SCRIPTEOF'\n${jsCode}\nSCRIPTEOF\nnode check.js`;
@@ -122,6 +148,8 @@ app.post('/api/run-pipeline', async (req, res) => {
     const research = await researchCompetitors(product);
     const researchSummary = research.answer || JSON.stringify(research).slice(0, 4000);
 
+    const tolerance = await researchPriceTolerance(product);
+
     const decision = await decidePricing(product, researchSummary);
 
     let validation = null;
@@ -129,15 +157,20 @@ app.post('/api/run-pipeline', async (req, res) => {
       // DEMO ONLY: bypasses the Tenki Sandbox safety check so the contrast is visible live.
       validation = { skipped: true };
     } else {
-      validation = await validateInSandbox(decision);
-      if (!validation.passed) {
-        return res.status(422).json({ error: `Price rejected by sandbox validation: ${validation.delta_pct}% change exceeds safety threshold` });
-      }
+      validation = await validateInSandbox(decision, tolerance.thresholdPct);
     }
 
-    const action = await applyPricingToRevenueCat(decision);
+    let action = null;
+    if (validation.passed === false) {
+      // Blocked: don't touch RevenueCat at all. Still return 200 so the UI can
+      // render the full story (research + decision + the block itself) instead
+      // of a generic error screen.
+      return res.json({ product, research: researchSummary, tolerance, decision, validation, action: null, blocked: true });
+    }
 
-    res.json({ product, research: researchSummary, decision, validation, action });
+    action = await applyPricingToRevenueCat(decision);
+
+    res.json({ product, research: researchSummary, tolerance, decision, validation, action });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message });

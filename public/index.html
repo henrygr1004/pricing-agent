@@ -214,10 +214,24 @@ async function run() {
           <div class="step-title"><span class="badge">⚠️</span> Validate <span class="tool-name">Tenki Sandbox</span></div>
           <div class="step-body">Skipped — this price went straight to RevenueCat with <strong>no safety check</strong>. This is what every other pricing tool does by default.</div>
         </div>`
-      : `<div class="step">
+      : `<div class="step${data.validation.passed ? '' : ' warn'}">
           <div class="step-title"><span class="badge">🛡️</span> Validate <span class="tool-name">Tenki Sandbox</span></div>
           <div class="kv"><span class="k">Sanity check</span><span class="v">${data.validation.passed ? 'Passed ✅' : 'Rejected ❌'}</span></div>
           <div class="kv"><span class="k">Price change</span><span class="v">${data.validation.delta_pct}%</span></div>
+          <div class="kv"><span class="k">Safety threshold</span><span class="v">±${data.validation.threshold_pct}%</span></div>
+          <div class="step-body" style="margin-top:8px; font-size:12px;">Threshold researched live via LinkUp: industry-typical price tolerance before churn risk.</div>
+        </div>`;
+
+    const actionBlock = data.blocked
+      ? `<div class="step error">
+          <div class="step-title"><span class="badge">🚫</span> Action <span class="tool-name">RevenueCat</span></div>
+          <div class="step-body">Blocked — RevenueCat was never called. The sandbox caught a price swing outside the safety threshold before it could reach production.</div>
+        </div>`
+      : `<div class="step">
+          <div class="step-title"><span class="badge">⚡</span> Action <span class="tool-name">RevenueCat</span></div>
+          <div class="kv"><span class="k">Applied price</span><span class="v">$${data.action.applied_price}</span></div>
+          <div class="kv"><span class="k">Project</span><span class="v">${data.action.offerings.project_id ?? 'connected'}</span></div>
+          <div class="kv"><span class="k">Offerings found</span><span class="v">${offeringsCount}</span></div>
         </div>`;
 
     results.innerHTML = `
@@ -237,12 +251,7 @@ async function run() {
 
       ${validateBlock}
 
-      <div class="step">
-        <div class="step-title"><span class="badge">⚡</span> Action <span class="tool-name">RevenueCat</span></div>
-        <div class="kv"><span class="k">Applied price</span><span class="v">$${data.action.applied_price}</span></div>
-        <div class="kv"><span class="k">Project</span><span class="v">${data.action.offerings.project_id ?? 'connected'}</span></div>
-        <div class="kv"><span class="k">Offerings found</span><span class="v">${offeringsCount}</span></div>
-      </div>
+      ${actionBlock}
     `;
   } catch (e) {
     loading.style.display = 'none';
