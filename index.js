@@ -141,7 +141,7 @@ async function applyPricingToRevenueCat(decision) {
 }
 
 app.post('/api/run-pipeline', async (req, res) => {
-  const { product, skipValidation } = req.body;
+  const { product } = req.body;
   if (!product) return res.status(400).json({ error: 'product is required' });
 
   try {
@@ -150,27 +150,25 @@ app.post('/api/run-pipeline', async (req, res) => {
 
     const tolerance = await researchPriceTolerance(product);
 
+    // Research and decision are identical either way — only the validation
+    // step differs — so we compute them once and branch after.
     const decision = await decidePricing(product, researchSummary);
 
-    let validation = null;
-    if (skipValidation) {
-      // DEMO ONLY: bypasses the Tenki Sandbox safety check so the contrast is visible live.
-      validation = { skipped: true };
-    } else {
-      validation = await validateInSandbox(decision, tolerance.thresholdPct);
-    }
+    // Branch A: real Tenki Sandbox validation gates the action.
+    const validation = await validateInSandbox(decision, tolerance.thresholdPct);
+    const withValidation = validation.passed === false
+      ? { validation, action: null, blocked: true }
+      : { validation, action: await applyPricingToRevenueCat(decision), blocked: false };
 
-    let action = null;
-    if (validation.passed === false) {
-      // Blocked: don't touch RevenueCat at all. Still return 200 so the UI can
-      // render the full story (research + decision + the block itself) instead
-      // of a generic error screen.
-      return res.json({ product, research: researchSummary, tolerance, decision, validation, action: null, blocked: true });
-    }
+    // Branch B: DEMO ONLY — bypasses the safety check entirely, applying the
+    // same decision straight to RevenueCat regardless of risk.
+    const withoutValidation = {
+      validation: { skipped: true },
+      action: await applyPricingToRevenueCat(decision),
+      blocked: false,
+    };
 
-    action = await applyPricingToRevenueCat(decision);
-
-    res.json({ product, research: researchSummary, tolerance, decision, validation, action });
+    res.json({ product, research: researchSummary, tolerance, decision, withValidation, withoutValidation });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message });

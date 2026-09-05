@@ -176,9 +176,10 @@
 </div>
 
 <script>
+let lastData = null;
+
 async function run() {
   const product = document.getElementById('product').value;
-  const skipValidation = document.getElementById('skipValidation').checked;
   const results = document.getElementById('results');
   const loading = document.getElementById('loading');
   const btn = document.getElementById('runBtn');
@@ -192,7 +193,7 @@ async function run() {
     const res = await fetch('/api/run-pipeline', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ product, skipValidation }),
+      body: JSON.stringify({ product }),
     });
     const data = await res.json();
     loading.style.display = 'none';
@@ -207,52 +208,8 @@ async function run() {
       return;
     }
 
-    const offeringsCount = data.action?.offerings?.items?.length ?? 0;
-
-    const validateBlock = data.validation.skipped
-      ? `<div class="step warn">
-          <div class="step-title"><span class="badge">⚠️</span> Validate <span class="tool-name">Tenki Sandbox</span></div>
-          <div class="step-body">Skipped — this price went straight to RevenueCat with <strong>no safety check</strong>. This is what every other pricing tool does by default.</div>
-        </div>`
-      : `<div class="step${data.validation.passed ? '' : ' warn'}">
-          <div class="step-title"><span class="badge">🛡️</span> Validate <span class="tool-name">Tenki Sandbox</span></div>
-          <div class="kv"><span class="k">Sanity check</span><span class="v">${data.validation.passed ? 'Passed ✅' : 'Rejected ❌'}</span></div>
-          <div class="kv"><span class="k">Price change</span><span class="v">${data.validation.delta_pct}%</span></div>
-          <div class="kv"><span class="k">Safety threshold</span><span class="v">±${data.validation.threshold_pct}%</span></div>
-          <div class="step-body" style="margin-top:8px; font-size:12px;">Threshold researched live via LinkUp: industry-typical price tolerance before churn risk.</div>
-        </div>`;
-
-    const actionBlock = data.blocked
-      ? `<div class="step error">
-          <div class="step-title"><span class="badge">🚫</span> Action <span class="tool-name">RevenueCat</span></div>
-          <div class="step-body">Blocked — RevenueCat was never called. The sandbox caught a price swing outside the safety threshold before it could reach production.</div>
-        </div>`
-      : `<div class="step">
-          <div class="step-title"><span class="badge">⚡</span> Action <span class="tool-name">RevenueCat</span></div>
-          <div class="kv"><span class="k">Applied price</span><span class="v">$${data.action.applied_price}</span></div>
-          <div class="kv"><span class="k">Project</span><span class="v">${data.action.offerings.project_id ?? 'connected'}</span></div>
-          <div class="kv"><span class="k">Offerings found</span><span class="v">${offeringsCount}</span></div>
-        </div>`;
-
-    results.innerHTML = `
-      <div class="step">
-        <div class="step-title"><span class="badge">🔎</span> Research <span class="tool-name">LinkUp</span></div>
-        <div class="step-body">${data.research}</div>
-      </div>
-
-      <div class="step">
-        <div class="step-title"><span class="badge">🧠</span> Decision <span class="tool-name">Nebius</span></div>
-        <div class="price-highlight">
-          <span class="amount">$${data.decision.suggested_price}</span>
-          <span class="currency">${data.decision.currency} / month</span>
-        </div>
-        <div class="step-body">${data.decision.reasoning}</div>
-      </div>
-
-      ${validateBlock}
-
-      ${actionBlock}
-    `;
+    lastData = data;
+    render();
   } catch (e) {
     loading.style.display = 'none';
     btn.disabled = false;
@@ -263,6 +220,63 @@ async function run() {
       </div>`;
   }
 }
+
+function render() {
+  if (!lastData) return;
+  const data = lastData;
+  const results = document.getElementById('results');
+  const skip = document.getElementById('skipValidation').checked;
+  const branch = skip ? data.withoutValidation : data.withValidation;
+
+  const offeringsCount = branch.action?.offerings?.items?.length ?? 0;
+
+  const validateBlock = branch.validation.skipped
+    ? `<div class="step warn">
+        <div class="step-title"><span class="badge">⚠️</span> Validate <span class="tool-name">Tenki Sandbox</span></div>
+        <div class="step-body">Skipped — this price went straight to RevenueCat with <strong>no safety check</strong>. This is what every other pricing tool does by default.</div>
+      </div>`
+    : `<div class="step${branch.validation.passed ? '' : ' warn'}">
+        <div class="step-title"><span class="badge">🛡️</span> Validate <span class="tool-name">Tenki Sandbox</span></div>
+        <div class="kv"><span class="k">Sanity check</span><span class="v">${branch.validation.passed ? 'Passed ✅' : 'Rejected ❌'}</span></div>
+        <div class="kv"><span class="k">Price change</span><span class="v">${branch.validation.delta_pct}%</span></div>
+        <div class="kv"><span class="k">Safety threshold</span><span class="v">±${branch.validation.threshold_pct}%</span></div>
+        <div class="step-body" style="margin-top:8px; font-size:12px;">Threshold researched live via LinkUp: industry-typical price tolerance before churn risk.</div>
+      </div>`;
+
+  const actionBlock = branch.blocked
+    ? `<div class="step error">
+        <div class="step-title"><span class="badge">🚫</span> Action <span class="tool-name">RevenueCat</span></div>
+        <div class="step-body">Blocked — RevenueCat was never called. The sandbox caught a price swing outside the safety threshold before it could reach production.</div>
+      </div>`
+    : `<div class="step">
+        <div class="step-title"><span class="badge">⚡</span> Action <span class="tool-name">RevenueCat</span></div>
+        <div class="kv"><span class="k">Applied price</span><span class="v">$${branch.action.applied_price}</span></div>
+        <div class="kv"><span class="k">Project</span><span class="v">${branch.action.offerings.project_id ?? 'connected'}</span></div>
+        <div class="kv"><span class="k">Offerings found</span><span class="v">${offeringsCount}</span></div>
+      </div>`;
+
+  results.innerHTML = `
+    <div class="step">
+      <div class="step-title"><span class="badge">🔎</span> Research <span class="tool-name">LinkUp</span></div>
+      <div class="step-body">${data.research}</div>
+    </div>
+
+    <div class="step">
+      <div class="step-title"><span class="badge">🧠</span> Decision <span class="tool-name">Nebius</span></div>
+      <div class="price-highlight">
+        <span class="amount">$${data.decision.suggested_price}</span>
+        <span class="currency">${data.decision.currency} / month</span>
+      </div>
+      <div class="step-body">${data.decision.reasoning}</div>
+    </div>
+
+    ${validateBlock}
+
+    ${actionBlock}
+  `;
+}
+
+document.getElementById('skipValidation').addEventListener('change', render);
 
 document.getElementById('product').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') run();
